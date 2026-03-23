@@ -44,10 +44,69 @@ model = RandomForestClassifier(
 model.fit(X_train, y_train)
 
 #Evaluation
+from sklearn.metrics import confusion_matrix, precision_score, recall_score, f1_score
+
 y_pred = model.predict(X_test)
-print(f"\nAccuracy: {accuracy_score(y_test, y_pred):.1%}")
+y_proba = model.predict_proba(X_test)[:, 1]  # probabilities for the "churned" class
+
+acc = accuracy_score(y_test, y_pred)
+prec = precision_score(y_test, y_pred)        # Of all predicted churns, how many actually churned?
+rec = recall_score(y_test, y_pred)            # Of all actual churns, how many did we catch?
+f1 = f1_score(y_test, y_pred)                 # Balance between precision and recall
+cm = confusion_matrix(y_test, y_pred)         # [[TN, FP], [FN, TP]]
+
+print(f"\nAccuracy:  {acc:.1%}")
+print(f"Precision: {prec:.1%}")
+print(f"Recall:    {rec:.1%}")
+print(f"F1 Score:  {f1:.1%}")
+print(f"\nConfusion Matrix:")
+print(f"  TN={cm[0][0]}  FP={cm[0][1]}")
+print(f"  FN={cm[1][0]}  TP={cm[1][1]}")
 print("\nClassification Report:")
 print(classification_report(y_test, y_pred, target_names=["Retained", "Churned"]))
+
+#Checking feature importance
+importance = dict(zip(feature_cols, model.feature_importances_))
+importance_sorted = dict(sorted(importance.items(), key=lambda x: x[1], reverse=True))
+print("Feature Importance (Churn):")
+for feat, imp in importance_sorted.items():
+    print(f"  {feat}: {imp:.3f}")
+
+# ══════════════════════════════════════════════════════════════
+# SAVE EVERYTHING
+# ══════════════════════════════════════════════════════════════
+
+# Save the model
+joblib.dump(model, "models/churn_model.joblib")
+
+# Save the label encoders
+joblib.dump(label_encoders, "models/label_encoders.joblib")
+
+# Save the feature column order
+with open("models/feature_cols.json", "w") as f:
+    json.dump(feature_cols, f)
+
+# Save evaluation metrics (NEW — professor asked for this)
+eval_metrics = {
+    "accuracy": round(acc, 4),
+    "precision": round(prec, 4),
+    "recall": round(rec, 4),
+    "f1_score": round(f1, 4),
+    "confusion_matrix": {
+        "true_negative": int(cm[0][0]),   # correctly predicted "stays"
+        "false_positive": int(cm[0][1]),  # predicted churn but actually stayed (wasted effort)
+        "false_negative": int(cm[1][0]),  # predicted stay but actually churned (MISSED — costly!)
+        "true_positive": int(cm[1][1])    # correctly predicted churn (caught it!)
+    },
+    "test_size": len(y_test),
+    "train_size": len(y_train)
+}
+
+with open("models/eval_metrics.json", "w") as f:
+    json.dump(eval_metrics, f, indent=2)
+
+print("\n✅ Model, encoders, features, and evaluation metrics saved to /models/")
+
 
 #Checking feature importance
 importance = dict(zip(feature_cols, model.feature_importances_))

@@ -9,6 +9,59 @@ st.set_page_config(
     layout="wide"  #full width of the screen
 )
 
+# Custom CSS for professional styling
+st.markdown("""
+<style>
+    /* Bigger, bolder title */
+    h1 {
+        font-size: 2.8rem !important;
+        font-weight: 700 !important;
+        color: #1B2A4A !important;
+        margin-bottom: 0.2rem !important;
+    }
+    
+    /* Subtitle / caption styling */
+    .stCaption {
+        font-size: 1.1rem !important;
+        color: #64748B !important;
+    }
+    
+    /* Tab buttons - bigger and more distinct */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid #E2E8F0;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        font-size: 1.05rem !important;
+        font-weight: 600 !important;
+        padding: 12px 24px !important;
+        border-radius: 8px 8px 0 0 !important;
+        color: #64748B !important;
+        background-color: #F0F2F6 !important;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        color: #FFFFFF !important;
+        background-color: #1B2A4A !important;
+        border-bottom: 3px solid #2E7D5B !important;
+    }
+    
+    /* Subheader styling */
+    h2 {
+        color: #1B2A4A !important;
+        font-weight: 600 !important;
+    }
+    
+    h3 {
+        color: #1B2A4A !important;
+        font-weight: 600 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
 #Cacheing data
 @st.cache_data  
 def load_data():
@@ -66,7 +119,7 @@ if high_risk_only:
 st.title("Customer Churn Early Warning System")
 st.caption("Decision-support tool for Customer Success Managers to Prioritize, understand, and act on customer churn risk.")
 
-tab_dashboard, tab_deepdive = st.tabs(["📊 Dashboard", "🔎 Customer Deep-Dive"])
+tab_dashboard, tab_deepdive, tab_query, tab_model = st.tabs(["Dashboard", "Customer Deep-Dive", "Ask Your Data", "Model Evaluation"])
 
 #Dashboard tab
 with tab_dashboard:
@@ -127,7 +180,7 @@ with tab_dashboard:
     st.markdown("---")
 
     #Risk Table sorted with impartance of action
-    st.subheader("📋 Customer Risk Worklist")
+    st.subheader("Customer Risk Worklist")
     st.caption("Sorted by churn probability. This is your daily action list.")
 
     #Prepare display table
@@ -259,7 +312,7 @@ with tab_deepdive:
     st.markdown("---")
 
     #Risk Drivers
-    st.subheader("⚠️ Why This Customer Is At Risk")
+    st.subheader("Why This Customer Is At Risk")
 
     all_drivers = get_all_risk_drivers(customer, customer["churn_probability"] / 100)
 
@@ -313,7 +366,7 @@ with tab_deepdive:
     st.markdown("---")
 
     #Recommended action and revenue impact
-    st.subheader("🎯 Recommended Action")
+    st.subheader("Recommended Action")
 
     action = customer["recommended_action"]
     if customer["risk_tier"] == "High":
@@ -337,6 +390,87 @@ with tab_deepdive:
         the customer's value and likelihood of responding to intervention.
 """)
 
+# ══════════════════════════════════════════════════════════
+    # AI ACCOUNT STRATEGIST — LLM Feature (Category A+B)
+    # ══════════════════════════════════════════════════════════
+    st.subheader("AI Account Strategist")
+    st.caption("AI-generated personalized retention strategy based on this customer's data.")
+
+    # Use session_state to persist the strategy across reruns
+    if "last_strategy_customer" not in st.session_state:
+        st.session_state.last_strategy_customer = None
+        st.session_state.last_strategy_result = None
+
+    if st.button("Generate Retention Strategy", key="strategist_btn", type="primary"):
+        with st.spinner("Analyzing customer profile and generating strategy..."):
+            from llm_utils import generate_retention_strategy
+
+            customer_data = {
+                "company": customer["company"],
+                "mrr": customer["mrr"],
+                "tenure_months": customer["tenure_months"],
+                "contract": customer["contract"],
+                "monthly_charges": customer["monthly_charges"],
+                "logins_last_30d": customer["logins_last_30d"],
+                "features_used_pct": customer["features_used_pct"],
+                "support_tickets_last_90d": customer["support_tickets_last_90d"],
+                "payment_method": customer["payment_method"],
+                "tech_support": customer["tech_support"],
+                "churn_probability": customer["churn_probability"],
+                "risk_tier": customer["risk_tier"],
+            }
+
+            result = generate_retention_strategy(customer_data, all_drivers)
+
+            # Save to session_state so it survives reruns
+            st.session_state.last_strategy_customer = customer["customer_id"]
+            st.session_state.last_strategy_result = result
+
+    # Display strategy if we have one for THIS customer
+    if (st.session_state.last_strategy_customer == customer["customer_id"] 
+        and st.session_state.last_strategy_result is not None):
+        
+        result = st.session_state.last_strategy_result
+
+        if result["success"]:
+            strategy = result["strategy"]
+
+            urgency_colors = {"critical": "🔴", "high": "🟠", "medium": "🟡"}
+            urgency_icon = urgency_colors.get(strategy.get("urgency", ""), "⚪")
+            st.markdown(f"**Urgency:** {urgency_icon} {strategy.get('urgency', 'N/A').upper()}")
+            st.markdown(f"**Strategy:** {strategy.get('strategy_name', 'N/A')}")
+            st.markdown(f"**Root Cause:** {strategy.get('root_cause', 'N/A').replace('$', '\\$')}")
+
+            st.markdown("---")
+
+            st.markdown("**Action Plan:**")
+            actions = strategy.get("actions", [])
+            for action in actions:
+                with st.container():
+                    st.markdown(
+                        f"**Step {action.get('step', '?')}:** {action.get('action', 'N/A')}  \n"
+                        f"👤 *Owner:* {action.get('owner', 'N/A')} · "
+                        f"⏱️ *Timeline:* {action.get('timeline', 'N/A')}  \n"
+                        f"✅ *Expected Outcome:* {action.get('expected_outcome', 'N/A')}"
+                    )
+                    st.markdown("")
+
+            talking_points = strategy.get("talking_points", [])
+            if talking_points:
+                st.markdown("**Talking Points for Customer Call:**")
+                for point in talking_points:
+                    st.markdown(f"- {point}")
+
+            st.markdown("---")
+            risk_warning = strategy.get("risk_if_no_action", "")
+            if risk_warning:
+                st.error(f"**If no action is taken:** {risk_warning.replace('$', '\\$')}")
+
+        else:
+            st.error(f"Strategy generation failed: {result.get('error', 'Unknown error')}")
+
+    st.markdown("---")
+
     #Revenue impact estimate
     st.subheader("Revenue Impact")
     impact_col1, impact_col2 = st.columns(2)
@@ -348,3 +482,176 @@ with tab_deepdive:
         saved_estimate = annual_revenue * 0.4 * (customer["churn_probability"] / 100)
         st.metric("Est. Revenue Saved by Acting", f"${saved_estimate:,.0f}",
                    delta="if intervention succeeds")
+
+# ══════════════════════════════════════════════════════════════
+# ASK YOUR DATA TAB — LLM Feature 
+# ══════════════════════════════════════════════════════════════
+with tab_query:
+
+    st.subheader("Ask Your Data")
+    st.caption("Ask questions about your customer portfolio in plain English. Powered by AI")
+
+    st.markdown("""
+    **Example questions you can ask:**
+    - *Which high-risk customers have the highest revenue?*
+    - *Compare month-to-month vs annual contract churn rates*
+    - *What are the common traits of my top 5 riskiest customers?*
+    - *Which customers should I focus on this week?*
+    - *How many customers have low feature adoption and high support tickets?*
+    """)
+
+    # Initialize chat history in session state
+    if "nl_query_history" not in st.session_state:
+        st.session_state.nl_query_history = []
+
+    # Question input
+    user_question = st.text_input("Ask a question about your customers:", 
+                                   placeholder="e.g., Which customers have the highest MRR but are at high risk?",
+                                   key="nl_query_input")
+
+    if st.button("Ask", key="nl_query_btn", type="primary") and user_question:
+        with st.spinner("🔍 Call 1: Planning analysis... 📊 Call 2: Querying your data..."):
+            from llm_utils import natural_language_query
+            try:
+                answer = natural_language_query(user_question, df_filtered)
+                # Save to history
+                st.session_state.nl_query_history.append({
+                    "question": user_question,
+                    "answer": answer
+                })
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+
+    # Display conversation history (most recent first)
+    for i, qa in enumerate(reversed(st.session_state.nl_query_history)):
+        st.markdown(f"**You:** {qa['question']}")
+        st.markdown(qa["answer"].replace("$", "\\$"))
+        if i < len(st.session_state.nl_query_history) - 1:
+            st.markdown("---")
+
+# ══════════════════════════════════════════════════════════════
+# MODEL EVALUATION TAB — Professor feedback: deeper evaluation
+# ══════════════════════════════════════════════════════════════
+with tab_model:
+
+    st.subheader("Model Performance & Evaluation")
+    st.caption("Transparency: how well does the churn prediction model perform, and what are the business implications?")
+
+    # Load saved evaluation metrics
+    import json as json_lib
+    with open("models/eval_metrics.json") as f:
+        metrics = json_lib.load(f)
+
+    # ── Metrics row ──
+    m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+    with m_col1:
+        st.metric("Accuracy", f"{metrics['accuracy']:.1%}")
+    with m_col2:
+        st.metric("Precision", f"{metrics['precision']:.1%}")
+    with m_col3:
+        st.metric("Recall", f"{metrics['recall']:.1%}")
+    with m_col4:
+        st.metric("F1 Score", f"{metrics['f1_score']:.1%}")
+
+    st.markdown("---")
+
+    # ── Confusion matrix visual ──
+    st.subheader("Confusion Matrix")
+
+    cm = metrics["confusion_matrix"]
+    cm_df = pd.DataFrame(
+        [[cm["true_negative"], cm["false_positive"]],
+         [cm["false_negative"], cm["true_positive"]]],
+        index=["Actually Stayed", "Actually Churned"],
+        columns=["Predicted Stay", "Predicted Churn"]
+    )
+
+    fig_cm = px.imshow(
+        cm_df,
+        text_auto=True,
+        color_continuous_scale=["#2E7D5B", "#D4943A", "#C4314B"],
+        labels=dict(color="Count"),
+        aspect="auto"
+    )
+    fig_cm.update_layout(height=350, title="")
+    st.plotly_chart(fig_cm, use_container_width=True)
+
+    st.markdown("---")
+
+    # ── Business impact explanation ──
+    st.subheader("Business Impact of Prediction Errors")
+
+    impact_col1, impact_col2 = st.columns(2)
+
+    with impact_col1:
+        st.error(f"""
+        **False Negatives: {cm['false_negative']} customers**
+
+        Customer churned but we predicted they'd stay.
+        **The CSM was never warned — revenue lost.**
+
+        This is the costly mistake. Each missed churner
+        means lost MRR with no chance to intervene.
+        """)
+
+    with impact_col2:
+        st.warning(f"""
+        **False Positives: {cm['false_positive']} customers**
+
+        We predicted churn but the customer stayed.
+        **CSM makes an unnecessary check-in call.**
+
+        Low cost — and the outreach can still
+        strengthen the customer relationship.
+        """)
+
+    st.markdown("---")
+
+    # ── Model details ──
+    st.subheader("Model Specification")
+
+    spec_col1, spec_col2 = st.columns(2)
+
+    with spec_col1:
+        st.markdown(f"""
+        **Algorithm:** Random Forest Classifier
+
+        **Hyperparameters:**
+        - Trees: 100
+        - Max depth: 8
+        - Class weight: balanced (compensates for fewer churners)
+
+        **Training data:** {metrics['train_size']} customers (80% split)
+
+        **Test data:** {metrics['test_size']} customers (20% split)
+        """)
+
+    with spec_col2:
+        st.markdown(f"""
+        **Why Random Forest?**
+        - Handles mixed feature types (numerical + categorical)
+        - Provides feature importance rankings
+        - Resistant to overfitting with proper depth limits
+        - Good baseline for prototype; production would compare
+          against XGBoost, Logistic Regression, and ensemble methods
+
+        **Why balanced class weights?**
+        - Dataset has ~28.6% churn rate (imbalanced)
+        - Without balancing, model would default to predicting "stay"
+        """)
+
+    st.markdown("---")
+
+    # ── Known limitations ──
+    st.subheader("Known Limitations & Roadmap")
+    st.markdown(f"""
+    **Current recall is {metrics['recall']:.0%}** — the model catches only {metrics['recall']:.0%} of actual churners.
+    This is expected for a prototype trained on synthetic data. Improvements for production:
+
+    1. **Real data** — Train on actual company CRM exports with historical churn labels
+    2. **Tune for recall** — In churn prevention, missing a churner (FN) costs more than a false alarm (FP).
+       Future versions would optimize the probability threshold to maximize recall.
+    3. **More algorithms** — Compare Random Forest against XGBoost, Logistic Regression, and gradient boosting
+    4. **Feature engineering** — Add time-series features (login trend, MRR change over time)
+    5. **User-uploaded data** — Allow each company to upload their own CSV, map columns, and retrain the model
+    """)
